@@ -28,6 +28,7 @@ export const envs ={
     defaulLimit: envVars.DEFAULT_LIMIT,
     nodeEnv: envVars.NODE_ENV
 }
+
 export const EnvConfiguration = () => {
     return {
         port: envVars.PORT,
