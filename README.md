@@ -20,6 +20,16 @@ npm i -g @nestjs/cli
 docker compose up --build -d
 ```
 
+5. Clonarel archivo __.env.template__ y renombrarlo a __.env__
+
+6. Llenar las variables de entorno definidas en el __.env__
+
+7. Ejecutar la aplicacion en dev 
+
+```
+yarn start:dev
+```
+
 ## Stack utilizado
 MongoDb
 

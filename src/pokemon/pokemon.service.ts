@@ -9,32 +9,63 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Pokemon } from './entities/pokemon.entity';
 import { isValidObjectId, Model } from 'mongoose';
 import { isString } from 'class-validator';
-import { zip } from 'rxjs/operators';
-import { create } from 'domain';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
+import { AxiosAdapter } from 'src/common/adapters/axios.adapter';
+import { ConfigService } from '@nestjs/config';
+import { envs } from 'src/config/env';
 
 @Injectable()
 export class PokemonService {
   constructor(
     @InjectModel(Pokemon.name)
     private readonly pokemonModel: Model<Pokemon>,
+    private readonly configService: ConfigService,
   ) {}
+
   async create(createPokemonDto: CreatePokemonDto) {
     try {
       let { name, ...createDto } = createPokemonDto;
       name = name.toLocaleLowerCase();
       const pokemon = await this.pokemonModel.create({ ...createDto, name });
-
       return pokemon;
     } catch (error) {
       this.handleExceptions(error);
     }
   }
 
-  findAll() {
-    return this.pokemonModel.find();
+  async findAll(paginationDto: PaginationDto): Promise<{ data: any[]; meta: { total: number; page: number; lastPage: number } }> {
+    const { page, limit , orderBy, name, filter = {} } = paginationDto as PaginationDto;
+    const skip = (page - 1) * limit;
+  
+    // Agregar el filtro por nombre si está presente
+    if (name) {
+      filter.name = { $regex: name, $options: 'i' }; // Búsqueda insensible a mayúsculas y minúsculas
+    }
+    
+    const total = await this.pokemonModel.countDocuments(filter);
+    const lastPage = Math.ceil(total / limit);
+  
+    const data = await this.pokemonModel
+      .find(filter)
+      .sort({ [orderBy]: 1 }) // Ordenar por el campo especificado en orderBy
+      .skip(skip)
+      .limit(limit) // Verificar si limit es válido
+      .select('-__v') // Excluir el campo __v
+      .lean() // Devuelve objetos JavaScript simples
+      .exec();  
+
+  
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        lastPage,
+      },
+    };
   }
 
-  async findOne(term: string) {
+  async findOne(term: string): Promise<Pokemon | null> {
     console.log(
       '🚀 ~ file: pokemon.service.ts:43 ~ PokemonService ~ findOne ~ term:',
       term,
@@ -45,40 +76,18 @@ export class PokemonService {
       // Si es un número, buscamos por el campo 'no'
       if (!isNaN(+term)) {
         pokemon = await this.pokemonModel.findOne({ no: term });
-        console.log(
-          '🚀 ~ file: pokemon.service.ts:48 ~ PokemonService ~ findOne ~ pokemon:',
-          pokemon,
-        );
       }
       // Si es un ObjectId de MongoDB, buscamos por _id
       else if (isValidObjectId(term)) {
-        pokemon = await this.pokemonModel.findById(term); // Pasamos solo 'term'
-        console.log(
-          '🚀 ~ file: pokemon.service.ts:52 ~ PokemonService ~ findOne ~ pokemon:',
-          pokemon,
-        );
+        pokemon = await this.pokemonModel.findById(term);
       }
       // Si es un string, buscamos por nombre
       else if (isString(term)) {
         pokemon = await this.pokemonModel.findOne({ name: term });
-        console.log(
-          '🚀 ~ file: pokemon.service.ts:56 ~ PokemonService ~ findOne ~ pokemon:',
-          pokemon,
-        );
-      }
-
-      // Si no encuentra el Pokémon, lanzamos una excepción
-      if (!pokemon) {
-        throw new BadRequestException(`Pokemon with id ${term} not found`);
       }
 
       return pokemon;
     } catch (error) {
-      // Si el error ya es una instancia de BadRequestException, lo volvemos a lanzar tal cual
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      // Otros errores no previstos, lanzar InternalServerErrorException
       throw new InternalServerErrorException(
         `Can't find pokemon with term "${term}"`,
       );
@@ -119,40 +128,35 @@ export class PokemonService {
 
       return pokemon;
     } catch (error) {
-      // Si es un error esperado como BadRequestException, relanzarlo
       this.handleExceptions(error);
     }
   }
+
   handleExceptions(error: any) {
     if (error.code === 11000) {
       throw new BadRequestException(
         `Pokemon with identifier "${JSON.stringify(error.keyValue)}" already exists`,
       );
-    }else{
-      console.log("here")
-      if(error instanceof BadRequestException){
+    } else {
+      if (error instanceof BadRequestException) {
         throw error;
       }
     }
 
-    // Si es un error inesperado, lanzar InternalServerErrorException
     throw new InternalServerErrorException(
       'An unexpected error occurred while processing the Pokemon.',
     );
   }
 
   async remove(id: string) {
-
     try {
-      const {deletedCount}= await this.pokemonModel.deleteOne({ _id: id });
+      const { deletedCount } = await this.pokemonModel.deleteOne({ _id: id });
       if (deletedCount === 0) {
         throw new BadRequestException(
           `Pokemon with identifier "${id}" not found`,
         );
       }
     } catch (error) {
-      console.log("🚀 ~ file: pokemon.service.ts:171 ~ PokemonService ~ remove ~ error:", error)
-      // Si es un error esperado como BadRequestException, relanzarlo
       this.handleExceptions(error);
     }
   }
