@@ -10,4 +10,22 @@ services:
     volumes:
       - ./mongo:/data/db
 
-  
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: your-web-app-image
+    restart: always
+    ports:
+      - 3000:3000
+    environment:
+      - DATABASE_URL=mongodb://db:27017/nest-pokemon
+    depends_on:
+      - db
+    networks:
+      - pokedex-network
+
+networks:
+  pokedex-network:
+    driver: bridge
+
